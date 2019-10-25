@@ -343,6 +343,114 @@ public class CommentSender extends ReplyToChangeSender {
   }
 
   /**
+   * Return true if `line` looks interesting to have at the top of a comment context in C.
+   *
+   * @param line The line.
+   */
+  private boolean isHeaderLineC(String line) {
+    if (Character.isWhitespace(line.charAt(0))) {
+      return false;
+    }
+
+    if (line.equals("{")) {
+      return false;
+    }
+
+    return true;
+  }
+
+  static final int NUM_CONTEXT_LINES = 10;
+
+  private boolean contextKeepGoing(
+      int lineNo, boolean seenHeaderLine, List<String> lines, Comment comment) {
+    if (lineNo == 0) {
+      return false;
+    }
+
+    if (!seenHeaderLine) {
+      return true;
+    }
+
+    if (lines.size() < NUM_CONTEXT_LINES) {
+      return true;
+    }
+
+    if (comment.range != null) {
+      /* This is a range comment, keep printing as long as we are in the range. */
+      return lineNo >= comment.range.startLine;
+    }
+
+    return false;
+  }
+
+  private boolean isInRange(Comment.Range range, int lineNo) {
+    return lineNo >= range.startLine && lineNo < range.endLine;
+  }
+
+  private List<String> getLinesOfCommentWithContext(Comment comment, PatchFile fileData) {
+    List<String> lines = new ArrayList<>();
+    if (comment.lineNbr == 0) {
+      // A file level comment has no line.
+      return lines;
+    }
+
+    boolean seenHeaderLine = false;
+    boolean printedEllipsis = false;
+    int lineNo = comment.range != null ? comment.range.endLine : comment.lineNbr;
+
+    // Largest width we'll need to format line numbers.
+    int lineNoWidth = Integer.toString(lineNo).length();
+
+    // The general idea is: print lines backwards from the line the comments
+    // is attached to.  We want to print at least 10 lines (+/- 1 as there's
+    // probably an off-by-one error below).  If, in those 10 lines, we have
+    // seen something that looks like some header (usually a function name),
+    // we are done.  Otherwise, keep looking at lines backwards until we find
+    // an interesting header line.  Print an ellipsis, so that the result
+    // looks something like:
+    //
+    //  983 | bt_self_component_port_input_message_iterator_can_seek_ns_from_origin(
+    //      | ...
+    //  997 |
+    //  998 |  if (iterator->methods.can_seek_ns_from_origin) {
+    //  999 |    /*
+    // 1000 |     * Initialize to an invalid value, so we can post-assert that
+    // 1001 |     * the method returned a valid value.
+    // 1002 |     */
+    // 1003 |    *can_seek = -1;
+    // 1004 |
+    // 1005 |    BT_LIB_LOGD("Calling user's \"can seek nanoseconds from origin\" method: %!+i",
+    // 1006 |      iterator);
+
+    while (contextKeepGoing(lineNo, seenHeaderLine, lines, comment)) {
+      String line = getLine(fileData, comment.side, lineNo);
+      boolean isHeaderLine = line.length() > 0 && isHeaderLineC(line);
+      boolean isInRange = comment.range != null && this.isInRange(comment.range, lineNo);
+
+      if (lines.size() < NUM_CONTEXT_LINES || isHeaderLine || isInRange) {
+        // Print the line
+        String lineWithNo = String.format("%" + lineNoWidth + "d | %s", lineNo, line);
+        lines.add(lineWithNo);
+      } else if (!printedEllipsis) {
+        // First extra line (on top of the NUM_CONTEXT_LINES first lines) and
+        // we know there will be more, insert an ellipsis.
+        String ellipsisLine = String.format("%" + lineNoWidth + "s | ...", "");
+        lines.add(ellipsisLine);
+
+        printedEllipsis = true;
+      }
+
+      seenHeaderLine |= isHeaderLine;
+
+      lineNo--;
+    }
+
+    Collections.reverse(lines);
+
+    return lines;
+  }
+
+  /**
    * @return a shortened version of the given comment's message. Will be shortened to 100 characters
    *     or the first line, or following the last period within the first 100 characters, whichever
    *     is shorter. If the message is shortened, an ellipsis is appended.
@@ -397,6 +505,7 @@ public class CommentSender extends ReplyToChangeSender {
       for (Comment comment : group.comments) {
         Map<String, Object> commentData = new HashMap<>();
         commentData.put("lines", getLinesOfComment(comment, group.fileData));
+        commentData.put("linesWithContext", getLinesOfCommentWithContext(comment, group.fileData));
         commentData.put("message", comment.message.trim());
         List<CommentFormatter.Block> blocks = CommentFormatter.parse(comment.message);
         commentData.put("messageBlocks", commentBlocksToSoyData(blocks));
