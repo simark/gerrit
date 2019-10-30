@@ -359,32 +359,28 @@ public class CommentSender extends ReplyToChangeSender {
     return true;
   }
 
-  static final int NUM_CONTEXT_LINES = 10;
+  // Number of lines above and below the line(s) of interest.
+  static final int NUM_CONTEXT_LINES = 5;
 
-  private boolean contextKeepGoing(
-      int lineNo, boolean seenHeaderLine, List<String> lines, Comment comment) {
+  // Return true if we should keep reading lines upwards.
+  private boolean contextKeepGoing(int lineNo, int minPrintedLine, boolean seenHeaderLine) {
+    // If we're at the top of the file, stop.
     if (lineNo == 0) {
       return false;
     }
 
+    // If we still haven't seen something that looks like a good header,
+    // we keep going.
     if (!seenHeaderLine) {
       return true;
     }
 
-    if (lines.size() < NUM_CONTEXT_LINES) {
+    // If we haven't printed the minimum lines we want yet, we keep going.
+    if (lineNo >= minPrintedLine) {
       return true;
     }
 
-    if (comment.range != null) {
-      /* This is a range comment, keep printing as long as we are in the range. */
-      return lineNo >= comment.range.startLine;
-    }
-
     return false;
-  }
-
-  private boolean isInRange(Comment.Range range, int lineNo) {
-    return lineNo >= range.startLine && lineNo < range.endLine;
   }
 
   private List<String> getLinesOfCommentWithContext(Comment comment, PatchFile fileData) {
@@ -396,44 +392,73 @@ public class CommentSender extends ReplyToChangeSender {
 
     boolean seenHeaderLine = false;
     boolean printedEllipsis = false;
-    int lineNo = comment.range != null ? comment.range.endLine : comment.lineNbr;
+
+    // Both are inclusive.  The doc in Comment.Range says end is exclusive, by
+    // my experience is that it's inclusive..
+    int commentRangeBeginLine = comment.range != null ? comment.range.startLine : comment.lineNbr;
+    int commentRangeEndLine = comment.range != null ? comment.range.endLine : comment.lineNbr;
+
+    // This is the lower bound of the lines we'll print.
+    final int minPrintedLine = Math.max(commentRangeBeginLine - NUM_CONTEXT_LINES, 0);
+
+    int lineNo = commentRangeEndLine + NUM_CONTEXT_LINES;
+
+    // Try to clamp commentRangeEndLine to the number of lines in the file.
+    try {
+      int numLinesInFile = fileData.getNumLines(comment.side);
+
+      lineNo = Math.min(numLinesInFile, lineNo);
+    } catch (Exception e) {
+      // Too bad, lineNo will stay the same.  If it's past the end of the file,
+      // we'll just get extra empty lines, since that's what getLine returns for
+      // non-existent lines.
+    }
 
     // Largest width we'll need to format line numbers.
     int lineNoWidth = Integer.toString(lineNo).length();
 
-    // The general idea is: print lines backwards from the line the comments
-    // is attached to.  We want to print at least 10 lines (+/- 1 as there's
-    // probably an off-by-one error below).  If, in those 10 lines, we have
-    // seen something that looks like some header (usually a function name),
-    // we are done.  Otherwise, keep looking at lines backwards until we find
-    // an interesting header line.  Print an ellipsis, so that the result
-    // looks something like:
+    // The general idea is: process the range we want to print (comment range
+    // +/- N lines) backwards .  If, in those 10 lines, we have not seen
+    // something that constitutes a good header, keep looking at lines backwards
+    // (but don't print them) until we find an interesting header line, and
+    // print it.  Print an ellipsis if there are omitted lines between the
+    // header and the rest of the context.  A final result could look like this
+    // (the comment has been put on line 148, hence the arrow):
     //
-    //  983 | bt_self_component_port_input_message_iterator_can_seek_ns_from_origin(
-    //      | ...
-    //  997 |
-    //  998 |  if (iterator->methods.can_seek_ns_from_origin) {
-    //  999 |    /*
-    // 1000 |     * Initialize to an invalid value, so we can post-assert that
-    // 1001 |     * the method returned a valid value.
-    // 1002 |     */
-    // 1003 |    *can_seek = -1;
-    // 1004 |
-    // 1005 |    BT_LIB_LOGD("Calling user's \"can seek nanoseconds from origin\" method: %!+i",
-    // 1006 |      iterator);
+    // 105 | void bt_self_component_port_input_message_iterator_destroy(struct bt_object *obj)
+    //     | ...
+    // 143 |
+    // 144 | 		g_queue_free(iterator->auto_seek.msgs);
+    // 145 | 		iterator->auto_seek.msgs = NULL;
+    // 146 | 	}
+    // 147 |
+    // 148 > 	if (iterator->upstream_msg_iters) {
+    // 149 | 		/*
+    // 150 | 		 * At this point the message iterator is finalized, so
+    // 151 | 		 * it's detached from any upstream message iterator.
+    // 152 | 		 */
+    // 153 | 		BT_ASSERT(iterator->upstream_msg_iters->len == 0);
 
-    while (contextKeepGoing(lineNo, seenHeaderLine, lines, comment)) {
+    while (contextKeepGoing(lineNo, minPrintedLine, seenHeaderLine)) {
       String line = getLine(fileData, comment.side, lineNo);
-      boolean isHeaderLine = line.length() > 0 && isHeaderLineC(line);
-      boolean isInRange = comment.range != null && this.isInRange(comment.range, lineNo);
 
-      if (lines.size() < NUM_CONTEXT_LINES || isHeaderLine || isInRange) {
-        // Print the line
-        String lineWithNo = String.format("%" + lineNoWidth + "d | %s", lineNo, line);
+      // Only consider it a suitable header if it's in or above the comment
+      // range.  For example, if there's a function declaration below in the
+      // context, it doesn't count as a suitable header for the comment context.
+      boolean isHeaderLine =
+          lineNo <= commentRangeEndLine && line.length() > 0 && isHeaderLineC(line);
+
+      // If it's in the range of context we want to print or it's the header,
+      // print it.
+      if (lineNo >= minPrintedLine || isHeaderLine) {
+
+        char separator =
+            lineNo >= commentRangeBeginLine && lineNo <= commentRangeEndLine ? '>' : '|';
+        String lineWithNo = String.format("%" + lineNoWidth + "d %c %s", lineNo, separator, line);
         lines.add(lineWithNo);
       } else if (!printedEllipsis) {
-        // First extra line (on top of the NUM_CONTEXT_LINES first lines) and
-        // we know there will be more, insert an ellipsis.
+        // First extra line (on top of the minimal amount of context we want
+        // to print) and we know there will be more, insert an ellipsis.
         String ellipsisLine = String.format("%" + lineNoWidth + "s | ...", "");
         lines.add(ellipsisLine);
 
