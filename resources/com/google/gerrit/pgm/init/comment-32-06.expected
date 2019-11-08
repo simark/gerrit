@@ -1,53 +1,53 @@
-> --- gdb/testsuite/lib/ada.exp
-> +++ gdb/testsuite/lib/ada.exp
-> @@ -9,7 +9,19 @@ # This program is distributed in the hope that it will be useful,
->  # but WITHOUT ANY WARRANTY; without even the implied warranty of
->  # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
->  # GNU General Public License for more details.
->  #
->  # You should have received a copy of the GNU General Public License
->  # along with this program.  If not, see <http://www.gnu.org/licenses/>.
->  
-> +
-> +# Compile the ada code in $code to a file based on $name, using the flags
-> +# $compile_flag as well as debug, nowarning and quiet.
+| --- gdb/testsuite/lib/ada.exp
+| +++ gdb/testsuite/lib/ada.exp
+| @@ -9,7 +9,19 @@ # This program is distributed in the hope that it will be useful,
+|  # but WITHOUT ANY WARRANTY; without even the implied warranty of
+|  # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+|  # GNU General Public License for more details.
+|  #
+|  # You should have received a copy of the GNU General Public License
+|  # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+|  
+| +
+| +# Compile the ada code in $code to a file based on $name, using the flags
+| +# $compile_flag as well as debug, nowarning and quiet.
 
 PS2, Line 18:
 
 Done
 
-> +# Return 1 if code can be compiled
-> +# Leave the file name of the resulting object in the upvar object.
-> +# Similar to gdb_simple_compile, but using gdb_compile_ada_1 instead of
-> +# gdb_compile.
-> +
-> +proc gdb_simple_compile_ada {name code {type object} {compile_flags {}} {object obj}} {
-> +    upvar $object obj
-> +
-> +    switch -regexp -- $type {
+| +# Return 1 if code can be compiled
+| +# Leave the file name of the resulting object in the upvar object.
+| +# Similar to gdb_simple_compile, but using gdb_compile_ada_1 instead of
+| +# gdb_compile.
+| +
+| +proc gdb_simple_compile_ada {name code {type object} {compile_flags {}} {object obj}} {
+| +    upvar $object obj
+| +
+| +    switch -regexp -- $type {
 
  ...
 
-> @@ -16,0 +51,23 @@ proc gdb_simple_compile_ada {name code {type object} {compile_flags {}} {object obj}} {
-> +        verbose "$name:  compilation failed, returning 0" 2
-> +        return 0
-> +    }
-> +    return 1
-> +}
-> +
-> +# Global variable used in gdb_ada_needs_libs_pic_suffix to detect recursion.
-> +# Initialize to 0.
-> +
-> +global calculating_ada_needs_libs_pic_suffix
+| @@ -16,0 +51,23 @@ proc gdb_simple_compile_ada {name code {type object} {compile_flags {}} {object obj}} {
+| +        verbose "$name:  compilation failed, returning 0" 2
+| +        return 0
+| +    }
+| +    return 1
+| +}
+| +
+| +# Global variable used in gdb_ada_needs_libs_pic_suffix to detect recursion.
+| +# Initialize to 0.
+| +
+| +global calculating_ada_needs_libs_pic_suffix
 
 PS2, Line 60:
 
 Indeed, it's not really needed, removed.
 
-> +set calculating_ada_needs_libs_pic_suffix 0
-> +
-> +# Caching true/false for whether we need to use -lgnarl_pic -lgnat_pic in
-> +# target_compile_ada_from_dir.
+| +set calculating_ada_needs_libs_pic_suffix 0
+| +
+| +# Caching true/false for whether we need to use -lgnarl_pic -lgnat_pic in
+| +# target_compile_ada_from_dir.
 
 PS2, Line 64:
 
@@ -56,12 +56,12 @@ Thanks, that's a nice addition.
 I've fixed this by using this text to document the three return
 statements in the body.
 
-> +
-> +gdb_caching_proc gdb_ada_needs_libs_pic_suffix {
-> +    global calculating_ada_needs_libs_pic_suffix
-> +    if { $calculating_ada_needs_libs_pic_suffix } {
-> +	return 0
-> +    }
-> +    set ada_hello {
-> +	with Ada.Text_IO;
-> +
+| +
+| +gdb_caching_proc gdb_ada_needs_libs_pic_suffix {
+| +    global calculating_ada_needs_libs_pic_suffix
+| +    if { $calculating_ada_needs_libs_pic_suffix } {
+| +	return 0
+| +    }
+| +    set ada_hello {
+| +	with Ada.Text_IO;
+| +

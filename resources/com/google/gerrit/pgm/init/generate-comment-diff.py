@@ -460,7 +460,7 @@ def print_one_diff_line(diff, diff_line, num_width_a, num_width_b):
                 end="",
             )
 
-    print("> {}".format(diff_line["line"]))
+    print("| {}".format(diff_line["line"]))
 
 
 def print_comments_matching_diff_line(comments, diff_line, revision):
@@ -502,7 +502,7 @@ def print_range_header(diff_slice):
             num_lines_b += 1
 
     print(
-        "> @@ -{},{} +{},{} @@ {}".format(
+        "| @@ -{},{} +{},{} @@ {}".format(
             line_start_a, num_lines_a, line_start_b, num_lines_b, context
         )
     )
@@ -512,14 +512,14 @@ def print_diff_with_comments(server, diff, comments, revision):
     assert type(comments) is list
 
     if diff.path_a is not None:
-        print("> --- {}".format(diff.path_a))
+        print("| --- {}".format(diff.path_a))
     else:
-        print("> --- /dev/null")
+        print("| --- /dev/null")
 
     if diff.path_b is not None:
-        print("> +++ {}".format(diff.path_b))
+        print("| +++ {}".format(diff.path_b))
     else:
-        print("> +++ /dev/null")
+        print("| +++ /dev/null")
 
     diff_lines, line_mapping_a_to_diff, line_mapping_b_to_diff = render_diff(diff)
 
