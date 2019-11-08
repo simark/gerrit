@@ -662,6 +662,9 @@ def main():
     server_address = sys.argv[1]
     change_number = int(sys.argv[2])
 
+    if server_address.endswith('/'):
+        server_address = server_address[:-1]
+
     server = Server(server_address)
 
     change = server.get_change(change_number)
