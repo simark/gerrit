@@ -98,11 +98,17 @@ public class SitePathInitializer {
 
     extract(site.gerrit_sh, getClass(), "gerrit.sh");
     chmod(0755, site.gerrit_sh);
+
     extract(site.gerrit_service, getClass(), "gerrit.service");
     chmod(0755, site.gerrit_service);
+
     extract(site.gerrit_socket, getClass(), "gerrit.socket");
     chmod(0755, site.gerrit_socket);
+
     chmod(0700, site.tmp_dir);
+
+    extract(site.generate_comment_diff_py, getClass(), "generate-comment-diff.py");
+    chmod(0755, site.generate_comment_diff_py);
 
     extractMailExample("Abandoned.soy");
     extractMailExample("AbandonedHtml.soy");

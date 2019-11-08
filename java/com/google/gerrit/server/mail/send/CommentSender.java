@@ -35,6 +35,7 @@ import com.google.gerrit.reviewdb.client.RobotComment;
 import com.google.gerrit.server.CommentsUtil;
 import com.google.gerrit.server.account.ProjectWatches.NotifyType;
 import com.google.gerrit.server.config.GerritServerConfig;
+import com.google.gerrit.server.config.SitePaths;
 import com.google.gerrit.server.mail.receive.Protocol;
 import com.google.gerrit.server.patch.PatchFile;
 import com.google.gerrit.server.patch.PatchList;
@@ -44,7 +45,13 @@ import com.google.gerrit.server.util.LabelVote;
 import com.google.gwtorm.client.KeyUtil;
 import com.google.inject.Inject;
 import com.google.inject.assistedinject.Assisted;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Path;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -56,6 +63,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TimeZone;
 import org.apache.james.mime4j.dom.field.FieldName;
 import org.eclipse.jgit.lib.Config;
 import org.eclipse.jgit.lib.Repository;
@@ -631,6 +639,102 @@ public class CommentSender extends ReplyToChangeSender {
     }
   }
 
+  private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
+
+  @Inject private SitePaths paths;
+
+  private String readAllInputStream(InputStream stream) throws IOException {
+    BufferedReader reader = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
+    StringBuilder sb = new StringBuilder();
+
+    while (true) {
+      char[] buf = new char[4096];
+      int n = reader.read(buf);
+
+      if (n < 0) {
+        break;
+      }
+
+      sb.append(buf, 0, n);
+    }
+
+    return sb.toString();
+  }
+
+  private String getDiffWithComments() {
+    // Find out path to our super script that generates diff interleaved with
+    // comments.
+    Path scriptPath = this.paths.generate_comment_diff_py;
+    String webUrl = this.args.canonicalWebUrlProvider.get();
+
+    if (webUrl == null) {
+      logger.atInfo().log("canonicalWebUrl is not set, can't compute diff with comments.");
+      return "";
+    }
+
+    // The "key" we pass to our script to identify which comments are included
+    // in this message are the author id and the timestamp.  The timestamp is
+    // in the same format as the REST API returns, e.g.:
+    //
+    //   2019-11-06 19:47:23.000000000
+    //
+    // The nanoseconds part returned by the REST API is always all zeroes,
+    // unlike the timestamp in this class.  So create a copy, to which we
+    // assign zeroes.
+    //
+    // This code has been copied from
+    // java/com/google/gerrit/json/SqlTimestampDeserializer.java
+    SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+    f.setTimeZone(UTC);
+    f.setLenient(true);
+    Timestamp timestampWithZeroes = (Timestamp) timestamp.clone();
+    timestampWithZeroes.setNanos(0);
+    String timestampStr = f.format(timestampWithZeroes) + "000000";
+
+    String[] args = {
+      scriptPath.toString(),
+      webUrl,
+      this.change.getId().toString(),
+      this.fromId.toString(),
+      timestampStr,
+    };
+
+    logger.atInfo().log("Running: %s", String.join(" ", args));
+    ProcessBuilder pb = new ProcessBuilder(args);
+
+    try {
+      Process start = pb.start();
+
+      // Consume all stdout and stderr.
+      InputStream stdout = start.getInputStream();
+      String out = this.readAllInputStream(stdout);
+
+      InputStream stderr = start.getErrorStream();
+      String err = this.readAllInputStream(stderr);
+
+      // Obtain the exit status of the process.
+      int status = -1;
+
+      while (status == -1) {
+        try {
+          status = start.waitFor();
+        } catch (InterruptedException e) {
+          // Nothing, we just retry.
+        }
+      }
+
+      if (!err.isEmpty()) {
+        logger.atSevere().log("stderr from generate-comment-diff.py: %s", err);
+      }
+
+      logger.atInfo().log("generate-comment-diff.py exited with status: %d", status);
+      return out;
+    } catch (IOException e) {
+      logger.atSevere().log("Error running generate-comment-diff.py: %s", e.toString());
+      return "";
+    }
+  }
+
   @Override
   protected void setupSoyContext() {
     super.setupSoyContext();
@@ -641,6 +745,7 @@ public class CommentSender extends ReplyToChangeSender {
       hasComments = !files.isEmpty();
     }
 
+    soyContext.put("diffWithComments", this.getDiffWithComments());
     soyContext.put(
         "patchSetCommentBlocks", commentBlocksToSoyData(CommentFormatter.parse(patchSetComment)));
     soyContext.put("labels", getLabelVoteSoyData(labels));

@@ -27,6 +27,7 @@ import com.google.gerrit.server.account.AccountCache;
 import com.google.gerrit.server.account.GroupBackend;
 import com.google.gerrit.server.config.AllProjectsName;
 import com.google.gerrit.server.config.AnonymousCowardName;
+import com.google.gerrit.server.config.CanonicalWebUrl;
 import com.google.gerrit.server.config.GerritInstanceName;
 import com.google.gerrit.server.config.GerritServerConfig;
 import com.google.gerrit.server.config.SitePaths;
@@ -82,6 +83,7 @@ public class EmailArguments {
   final OutgoingEmailValidator validator;
   final boolean addInstanceNameInSubject;
   final Provider<String> instanceNameProvider;
+  final Provider<String> canonicalWebUrlProvider;
 
   @Inject
   EmailArguments(
@@ -113,6 +115,7 @@ public class EmailArguments {
       Provider<InternalAccountQuery> accountQueryProvider,
       OutgoingEmailValidator validator,
       @GerritInstanceName Provider<String> instanceNameProvider,
+      @CanonicalWebUrl Provider<String> canonicalWebUrlProvider,
       @GerritServerConfig Config cfg) {
     this.server = server;
     this.projectCache = projectCache;
@@ -142,6 +145,7 @@ public class EmailArguments {
     this.accountQueryProvider = accountQueryProvider;
     this.validator = validator;
     this.instanceNameProvider = instanceNameProvider;
+    this.canonicalWebUrlProvider = canonicalWebUrlProvider;
 
     this.addInstanceNameInSubject = cfg.getBoolean("sendemail", "addInstanceNameInSubject", false);
   }

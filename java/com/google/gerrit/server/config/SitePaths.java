@@ -49,6 +49,7 @@ public final class SitePaths {
   public final Path gerrit_service;
   public final Path gerrit_socket;
   public final Path gerrit_war;
+  public final Path generate_comment_diff_py;
 
   public final Path gerrit_config;
   public final Path secure_config;
@@ -94,6 +95,7 @@ public final class SitePaths {
     gerrit_service = bin_dir.resolve("gerrit.service");
     gerrit_socket = bin_dir.resolve("gerrit.socket");
     gerrit_war = bin_dir.resolve("gerrit.war");
+    generate_comment_diff_py = bin_dir.resolve("generate-comment-diff.py");
 
     gerrit_config = etc_dir.resolve("gerrit.config");
     secure_config = etc_dir.resolve("secure.config");

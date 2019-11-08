@@ -1,0 +1,92 @@
+> --- gdb/testsuite/lib/ada.exp
+> +++ gdb/testsuite/lib/ada.exp
+> @@ -7,13 +7,23 @@ # (at your option) any later version.
+>  #
+>  # This program is distributed in the hope that it will be useful,
+>  # but WITHOUT ANY WARRANTY; without even the implied warranty of
+>  # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+>  # GNU General Public License for more details.
+>  #
+>  # You should have received a copy of the GNU General Public License
+>  # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+>  
+>  # Call target_compile with SOURCE DEST TYPE and OPTIONS as argument,
+>  # after having temporarily changed the current working directory to
+>  # BUILDDIR.
+
+PS1, Line 18:
+
+Done
+
+>  
+> +proc gdb_simple_compile_ada {name code {type object} {compile_flags {}} {object obj}} {
+
+PS1, Line 20:
+
+Done
+
+> +    upvar $object obj
+> +
+> +    switch -regexp -- $type {
+> +        "executable" {
+> +            set postfix "x"
+> +        }
+> +        "object" {
+> +            set postfix "o"
+> +        }
+
+ ...
+
+> @@ -20,0 +46,19 @@ proc gdb_simple_compile_ada {name code {type object} {compile_flags {}} {object obj}} {
+> +    if ![string match "" $lines] then {
+> +        verbose "$name:  compilation failed, returning 0" 2
+> +        return 0
+> +    }
+> +    return 1
+> +}
+> +
+> +global calculating_ada_needs_libs_pic_suffix
+> +set calculating_ada_needs_libs_pic_suffix 0
+> +gdb_caching_proc gdb_ada_needs_libs_pic_suffix {
+
+PS1, Line 55:
+
+Done
+
+> +    global calculating_ada_needs_libs_pic_suffix
+> +    if { $calculating_ada_needs_libs_pic_suffix } {
+> +	return 0
+> +    }
+> +    set ada_hello {
+> +	with Ada.Text_IO;
+> +
+> +	procedure Hello is
+> +	begin
+
+ ...
+
+> @@ -46,18 +122,18 @@ proc target_compile_ada_from_dir {builddir source dest type options} {
+>  
+>      if { $save_multilib_flag != "" } {
+>  	unset_board_info "multilib_flags"
+>  	set_board_info multilib_flags $save_multilib_flag
+>      }
+>  
+>      return -options $options $result
+>  }
+>  
+>  # Compile some Ada code.
+
+PS1, Line 131:
+
+Indeed, documentation updated.
+
+>  
+> -proc gdb_compile_ada {source dest type options} {
+> +proc gdb_compile_ada_1 {source dest type options} {
+>  
+>      set srcdir [file dirname $source]
+>      set gprdir [file dirname $srcdir]
+>      set objdir [file dirname $dest]
+>  
+>      # Although strictly not necessary, we force the recompilation
